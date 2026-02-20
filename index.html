@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>レシート割り勘アプリ（自動コピー版）</title>
+<title>レシート割り勘アプリ（カメラ直接OCR）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
 <style>
@@ -12,6 +12,7 @@ button { background:#4f7cff; color:white; border:none; cursor:pointer; }
 textarea { height:180px; }
 .card { background:white; padding:8px; margin:6px 0; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); display:flex; gap:6px; align-items:center;}
 .card span { flex:1; }
+video { width:100%; border-radius:8px; margin:6px 0;}
 </style>
 </head>
 <body>
@@ -24,12 +25,17 @@ textarea { height:180px; }
 <h2>📝 レシート読み取り</h2>
 <label>日付: <input type="text" id="dateInput" placeholder="YYYY/MM/DD"></label>
 <label>お店の名前: <input type="text" id="shopInput" placeholder="スーパー名など"></label>
-<input type="file" id="imageInput" accept="image/*">
+
+<video id="video" autoplay></video>
+<button onclick="captureFrame()">読み取り</button>
+
 <div id="itemsArea"></div>
 
 <h2>まとめ</h2>
 <button onclick="generateSummary()">まとめ作成（自動コピー付き）</button>
 <textarea id="summaryOutput" readonly placeholder="ここにまとめテキストが出るよ"></textarea>
+
+<canvas id="canvas" style="display:none;"></canvas>
 
 <script>
 let person1="", person2="";
@@ -41,6 +47,12 @@ window.onload=function(){
     document.getElementById("name2").value = saved2;
     person1=saved1; person2=saved2;
   }
+
+  // カメラ起動
+  const video=document.getElementById("video");
+  navigator.mediaDevices.getUserMedia({video:true})
+    .then(stream => { video.srcObject = stream; })
+    .catch(err => alert("カメラ起動できないよ💦"));
 }
 
 function registerNames(){
@@ -53,26 +65,21 @@ function registerNames(){
   alert("名前登録完了✨");
 }
 
-const input=document.getElementById("imageInput");
-const itemsArea=document.getElementById("itemsArea");
-
-input.addEventListener("change", async ()=>{
-  const file=input.files[0];
-  if(!file) return;
-  itemsArea.innerHTML="<em>読み取り中…</em>";
-  const {data:{text}} = await Tesseract.recognize(file,"jpn+eng");
-  displayItems(text);
-});
-
-function normalizeNumbers(str){ return str.replace(/[①②③④⑤⑥⑦⑧⑨⓪]/g,m=>"①②③④⑤⑥⑦⑧⑨⓪".indexOf(m)); }
+function cleanLine(line){
+  let l = line.replace(/[¥￥]/g,'¥');           
+  l = l.replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0));
+  l = l.replace(/\s/g,'');                     
+  return l;
+}
 
 function displayItems(text){
+  const itemsArea=document.getElementById("itemsArea");
   itemsArea.innerHTML="";
   const lines=text.split("\n");
   lines.forEach((line)=>{
-    let cleaned=line.replace(/\s/g,""); cleaned=normalizeNumbers(cleaned);
+    let cleaned = cleanLine(line);
     if(cleaned.match(/TEL|登録|番号|日時|担当|小計|合計|預|つり/)) return;
-    const match=cleaned.match(/(.+?)[¥\\￥]?([\d,]{1,})$/);
+    const match=cleaned.match(/(.+?)[¥\\]?([\d,]{1,})$/);
     if(!match) return;
     const itemName=match[1];
     const price=parseInt(match[2].replace(/,/g,""));
@@ -92,6 +99,20 @@ function displayItems(text){
   });
 }
 
+function captureFrame(){
+  const video=document.getElementById("video");
+  const canvas=document.getElementById("canvas");
+  canvas.width=video.videoWidth;
+  canvas.height=video.videoHeight;
+  const ctx=canvas.getContext("2d");
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const dataUrl=canvas.toDataURL();
+  itemsArea.innerHTML="<em>読み取り中…</em>";
+  Tesseract.recognize(dataUrl,'jpn+eng').then(({data:{text}})=>{
+    displayItems(text);
+  });
+}
+
 function generateSummary(){
   const date=document.getElementById("dateInput").value||"未入力";
   const shop=document.getElementById("shopInput").value||"未入力";
@@ -105,23 +126,17 @@ function generateSummary(){
     const price=parseInt(span.match(/¥(\d+)/)[1]);
     const priceTaxed=Math.round(price*(1+tax));
     summary+=`${span} → ${choice} 税込${priceTaxed}円\n`;
-    if(choice==="shared"){
-      total1+=Math.round(priceTaxed/2);
-      total2+=Math.round(priceTaxed/2);
-    } else if(choice==="person1"){
-      total1+=priceTaxed;
-    } else if(choice==="person2"){
-      total2+=priceTaxed;
-    }
+    if(choice==="shared"){ total1+=Math.round(priceTaxed/2); total2+=Math.round(priceTaxed/2); }
+    else if(choice==="person1"){ total1+=priceTaxed; }
+    else if(choice==="person2"){ total2+=priceTaxed; }
   });
   summary+=`\n${person1} 合計: ¥${total1}\n${person2} 合計: ¥${total2}`;
   document.getElementById("summaryOutput").value=summary;
 
-  // 🔥 最後の合計部分を自動でコピー
   const lines=summary.split("\n");
   const totalLines=lines.slice(-2).join("\n");
   navigator.clipboard.writeText(totalLines)
-    .then(()=>console.log("合計を自動でコピーしました✨"))
+    .then(()=>console.log("合計を自動コピーしました✨"))
     .catch(()=>console.log("自動コピー失敗💦"));
 }
 </script>
