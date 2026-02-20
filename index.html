@@ -2,15 +2,16 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>レシート割り勘アプリ（最終版）</title>
+<title>レシート割り勘アプリ（安定版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
 <style>
 body { font-family:sans-serif; padding:16px; background:#f4f6f8; }
 input, button, select, textarea { width:100%; padding:10px; margin:6px 0; font-size:16px; border-radius:8px; border:1px solid #ccc; }
 button { background:#4f7cff; color:white; border:none; cursor:pointer; }
-textarea { height:150px; }
-.card { background:white; padding:8px; margin:6px 0; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); display:flex; justify-content:space-between; align-items:center; gap:6px;}
+textarea { height:180px; }
+.card { background:white; padding:8px; margin:6px 0; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); display:flex; gap:6px; align-items:center;}
+.card span { flex:1; }
 </style>
 </head>
 <body>
@@ -33,15 +34,15 @@ textarea { height:150px; }
 <script>
 let person1="", person2="";
 window.onload=function(){
-  const saved1 = localStorage.getItem("person1");
-  const saved2 = localStorage.getItem("person2");
+  const saved1=localStorage.getItem("person1");
+  const saved2=localStorage.getItem("person2");
   if(saved1 && saved2){
     document.getElementById("name1").value = saved1;
     document.getElementById("name2").value = saved2;
-    person1 = saved1;
-    person2 = saved2;
+    person1=saved1; person2=saved2;
   }
 }
+
 function registerNames(){
   const n1=document.getElementById("name1").value.trim();
   const n2=document.getElementById("name2").value.trim();
@@ -54,11 +55,12 @@ function registerNames(){
 
 const input=document.getElementById("imageInput");
 const itemsArea=document.getElementById("itemsArea");
+
 input.addEventListener("change", async ()=>{
   const file=input.files[0];
   if(!file) return;
   itemsArea.innerHTML="<em>読み取り中…</em>";
-  const {data:{text}}=await Tesseract.recognize(file,"jpn+eng");
+  const {data:{text}} = await Tesseract.recognize(file,"jpn+eng");
   displayItems(text);
 });
 
@@ -67,7 +69,7 @@ function normalizeNumbers(str){ return str.replace(/[①②③④⑤⑥⑦⑧⑨
 function displayItems(text){
   itemsArea.innerHTML="";
   const lines=text.split("\n");
-  lines.forEach((line,i)=>{
+  lines.forEach((line)=>{
     let cleaned=line.replace(/\s/g,""); cleaned=normalizeNumbers(cleaned);
     if(cleaned.match(/TEL|登録|番号|日時|担当|小計|合計|預|つり/)) return;
     const match=cleaned.match(/(.+?)[¥\\￥]?([\d,]{1,})$/);
@@ -77,12 +79,12 @@ function displayItems(text){
     if(price<10) return;
     const div=document.createElement("div"); div.className="card";
     div.innerHTML=`<span>${itemName} - ¥${price}</span>
-      <select id="choice${i}">
+      <select class="choice">
         <option value="shared" selected>割り勘</option>
         <option value="person1">${person1}</option>
         <option value="person2">${person2}</option>
       </select>
-      <select id="tax${i}">
+      <select class="tax">
         <option value="0.08" selected>税込8%</option>
         <option value="0.10">税込10%</option>
       </select>`;
@@ -96,10 +98,10 @@ function generateSummary(){
   let summary=`日付: ${date}\nお店: ${shop}\n\n`;
   let total1=0, total2=0;
   const cards=document.querySelectorAll("#itemsArea .card");
-  cards.forEach((card,i)=>{
+  cards.forEach((card)=>{
     const span=card.querySelector("span").textContent;
-    const choice=card.querySelector(`#choice${i}`).value;
-    const tax=parseFloat(card.querySelector(`#tax${i}`).value);
+    const choice=card.querySelector(".choice").value;
+    const tax=parseFloat(card.querySelector(".tax").value);
     const price=parseInt(span.match(/¥(\d+)/)[1]);
     const priceTaxed=Math.round(price*(1+tax));
     summary+=`${span} → ${choice} 税込${priceTaxed}円\n`;
@@ -116,5 +118,6 @@ function generateSummary(){
   document.getElementById("summaryOutput").value=summary;
 }
 </script>
+
 </body>
 </html>
