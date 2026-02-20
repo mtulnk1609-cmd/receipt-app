@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>レシート割り勘アプリ（カメラOCR安定版）</title>
+<title>レシート割り勘アプリ（背面カメラOCR版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
 <style>
@@ -48,12 +48,17 @@ window.onload=function(){
     person1=saved1; person2=saved2;
   }
 
-  // カメラ起動
+  // 背面カメラ優先で起動
   const video=document.getElementById("video");
   if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
-    navigator.mediaDevices.getUserMedia({video:true})
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } })
       .then(stream => { video.srcObject = stream; })
-      .catch(err => alert("カメラ許可が必要だよ💦"));
+      .catch(err => {
+        // 背面が使えなければ前面カメラにフォールバック
+        navigator.mediaDevices.getUserMedia({ video: true })
+          .then(stream => { video.srcObject = stream; })
+          .catch(e => alert("カメラ起動できません💦"));
+      });
   } else {
     alert("このブラウザではカメラが使えません");
   }
