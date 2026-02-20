@@ -2,17 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>レシート割り勘アプリ</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
+<title>レシート割り勘アプリ（手入力版）</title>
 <style>
-body { font-family: sans-serif; padding:16px; background:#f4f6f8;}
-h2 { margin-top:24px; }
-input, button, select, textarea { width:100%; padding:10px; margin:6px 0; font-size:16px; border-radius:8px; border:1px solid #ccc; }
-button { background:#4f7cff; color:white; border:none; }
-textarea { height:120px; }
-.card { background:white; padding:8px; margin:6px 0; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); }
-.result { font-size:18px; font-weight:bold; }
+body { font-family: sans-serif; margin: 20px; }
+input, button, textarea, select { width:100%; margin:5px 0; padding:8px; font-size:16px; }
+textarea { height:150px; }
 </style>
 </head>
 <body>
@@ -22,26 +16,25 @@ textarea { height:120px; }
 <input type="text" id="name2" placeholder="2人目の名前">
 <button onclick="registerNames()">登録</button>
 
-<h2>🧾 レシート読み取り</h2>
+<h2>📝 レシート入力（手入力）</h2>
 <label>日付: <input type="date" id="dateInput"></label>
 <label>お店の名前: <input type="text" id="shopInput" placeholder="スーパー名など"></label>
-<input type="file" id="imageInput" disabled>
 
-<div id="shopInfo"></div>
-<div id="itemsArea"></div>
+<textarea id="receiptInput" placeholder="商品名 金額&#10;例: アイスコーヒー 500"></textarea>
 
-<h2>💰 計算・まとめ</h2>
-<button onclick="calculate()">計算してまとめ</button>
-<textarea id="summaryOutput" readonly placeholder="ここにまとめテキストが出るよ"></textarea>
+<h2>💰 割り勘ルール</h2>
+<label><input type="checkbox" id="onlyMe"> アイスコーヒー → 私だけ</label>
+<label><input type="checkbox" id="onlyA"> じゃがいも → Aさんだけ</label>
+<label><input type="checkbox" id="split"> それ以外は割り勘</label>
+
+<button onclick="generateSummary()">まとめ作成</button>
+
+<h2>まとめ</h2>
+<textarea id="summaryOutput" readonly></textarea>
 
 <script>
 let person1 = "";
 let person2 = "";
-
-const input = document.getElementById("imageInput");
-const itemsArea = document.getElementById("itemsArea");
-const resultArea = document.getElementById("summaryOutput");
-const shopInfo = document.getElementById("shopInfo");
 
 window.onload = function() {
   const saved1 = localStorage.getItem("person1");
@@ -51,7 +44,6 @@ window.onload = function() {
     document.getElementById("name2").value = saved2;
     person1 = saved1;
     person2 = saved2;
-    input.disabled = false;
   }
 }
 
@@ -66,101 +58,36 @@ function registerNames() {
   person2 = n2;
   localStorage.setItem("person1", person1);
   localStorage.setItem("person2", person2);
-  input.disabled = false;
   alert("名前登録完了✨");
 }
 
-input.addEventListener("change", async () => {
-  const file = input.files[0];
-  if (!file) return;
-  itemsArea.innerHTML = "<em>読み取り中…</em>";
-  const { data: { text } } = await Tesseract.recognize(file, "jpn+eng");
-  extractShopInfo(text);
-  displayItems(text);
-});
+function generateSummary() {
+  const date = document.getElementById("dateInput").value || "未入力";
+  const shop = document.getElementById("shopInput").value || "未入力";
+  const receiptText = document.getElementById("receiptInput").value;
 
-function normalizeNumbers(str) {
-  return str.replace(/[①]/g,"1").replace(/[②]/g,"2").replace(/[③]/g,"3")
-            .replace(/[④]/g,"4").replace(/[⑤]/g,"5").replace(/[⑥]/g,"6")
-            .replace(/[⑦]/g,"7").replace(/[⑧]/g,"8").replace(/[⑨]/g,"9")
-            .replace(/[⓪]/g,"0");
-}
+  const lines = receiptText.split("\n");
+  let summary = `日付: ${date}\nお店: ${shop}\n\n`;
 
-function extractShopInfo(text) {
-  const lines = text.split("\n");
-  let shopName="", date="";
   lines.forEach(line => {
-    const cleaned = normalizeNumbers(line);
-    if (!shopName && cleaned.match(/店|スーパー|SHOP/)) {
-      shopName = cleaned;
-    }
-    if (!date) {
-      const m = cleaned.match(/\d{4}\/\d{1,2}\/\d{1,2}/);
-      if (m) date = m[0];
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 2) return;
+    let price = parts.pop().replace(/[^\d]/g,'');
+    let item = parts.join(" ");
+    if (!price) return;
+
+    if (document.getElementById("onlyMe").checked && item.includes("アイスコーヒー")) {
+      summary += `${item} ¥${price} → ${person1}だけ\n`;
+    } else if (document.getElementById("onlyA").checked && item.includes("じゃがいも")) {
+      summary += `${item} ¥${price} → ${person2}だけ\n`;
+    } else if (document.getElementById("split").checked) {
+      summary += `${item} ¥${price} → 割り勘\n`;
+    } else {
+      summary += `${item} ¥${price} → 未設定\n`;
     }
   });
-  if (!document.getElementById("dateInput").value) {
-    document.getElementById("dateInput").value = date;
-  }
-  if (!document.getElementById("shopInput").value) {
-    document.getElementById("shopInput").value = shopName;
-  }
-  shopInfo.innerHTML = `
-    <div class="card">
-      🏪 ${shopName || "店名不明"}<br>
-      📅 ${date || "日付不明"}
-    </div>`;
-}
 
-function displayItems(text) {
-  itemsArea.innerHTML = "";
-  const lines = text.split("\n");
-  lines.forEach(line => {
-    let cleaned = line.replace(/\s/g,"");
-    cleaned = normalizeNumbers(cleaned);
-    if (cleaned.match(/TEL|登録|番号|日時|担当|小計|合計|預|つり/)) return;
-    const match = cleaned.match(/(.+?)[¥\\￥]?([\d,]{2,})$/);
-    if (!match) return;
-    const name = match[1];
-    const price = parseInt(match[2].replace(/,/g,""));
-    if (price < 10) return;
-    const div = document.createElement("div");
-    div.className="card";
-    div.innerHTML=`
-      ${name} - ${price}円
-      <select>
-        <option value="shared">割り勘</option>
-        <option value="p1">${person1}</option>
-        <option value="p2">${person2}</option>
-      </select>
-    `;
-    div.dataset.price = price;
-    itemsArea.appendChild(div);
-  });
-}
-
-function calculate() {
-  const date = document.getElementById("dateInput").value;
-  const shop = document.getElementById("shopInput").value;
-  let p1=0, p2=0, shared=0;
-  const items = itemsArea.children;
-  let summary = `日付: ${date}\n店: ${shop}\n\n`;
-
-  for (let item of items) {
-    const price = parseInt(item.dataset.price);
-    const who = item.querySelector("select").value;
-    const text = item.textContent.split(" - ")[0];
-    if (who==="p1") p1 += price;
-    else if (who==="p2") p2 += price;
-    else shared += price;
-    summary += `${text} ¥${price} → ${who==="p1"?person1:(who==="p2"?person2:"割り勘")}\n`;
-  }
-
-  const half = Math.ceil(shared/2);
-  summary += `\n割り勘合計: ¥${shared} → 1人 ¥${half}\n\n`;
-  summary += `${person1}: ¥${p1+half}\n${person2}: ¥${p2+half}\n`;
-
-  resultArea.value = summary;
+  document.getElementById("summaryOutput").value = summary;
 }
 </script>
 
