@@ -1,57 +1,20 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
 <meta charset="UTF-8">
+<title>レシート割り勘アプリ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>最強レシート割り勘</title>
 <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
-
 <style>
-body{
-  font-family: sans-serif;
-  padding:16px;
-  background:#f4f6f8;
-}
-
-h2{
-  margin-top:24px;
-}
-
-input, button, select{
-  width:100%;
-  padding:12px;
-  margin-top:8px;
-  margin-bottom:8px;
-  font-size:16px;
-  border-radius:8px;
-  border:1px solid #ccc;
-}
-
-button{
-  background:#4f7cff;
-  color:white;
-  border:none;
-}
-
-button:active{
-  opacity:0.8;
-}
-
-.card{
-  background:white;
-  padding:12px;
-  margin-bottom:10px;
-  border-radius:12px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.1);
-}
-
-.result{
-  font-size:18px;
-  font-weight:bold;
-}
+body { font-family: sans-serif; padding:16px; background:#f4f6f8;}
+h2 { margin-top:24px; }
+input, button, select, textarea { width:100%; padding:10px; margin:6px 0; font-size:16px; border-radius:8px; border:1px solid #ccc; }
+button { background:#4f7cff; color:white; border:none; }
+textarea { height:120px; }
+.card { background:white; padding:8px; margin:6px 0; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); }
+.result { font-size:18px; font-weight:bold; }
 </style>
 </head>
-
 <body>
 
 <h2>👤 名前登録</h2>
@@ -60,14 +23,16 @@ button:active{
 <button onclick="registerNames()">登録</button>
 
 <h2>🧾 レシート読み取り</h2>
+<label>日付: <input type="date" id="dateInput"></label>
+<label>お店の名前: <input type="text" id="shopInput" placeholder="スーパー名など"></label>
 <input type="file" id="imageInput" disabled>
 
 <div id="shopInfo"></div>
 <div id="itemsArea"></div>
 
-<h2>💰 計算</h2>
-<button onclick="calculate()">計算する</button>
-<div id="result" class="result"></div>
+<h2>💰 計算・まとめ</h2>
+<button onclick="calculate()">計算してまとめ</button>
+<textarea id="summaryOutput" readonly placeholder="ここにまとめテキストが出るよ"></textarea>
 
 <script>
 let person1 = "";
@@ -75,14 +40,13 @@ let person2 = "";
 
 const input = document.getElementById("imageInput");
 const itemsArea = document.getElementById("itemsArea");
-const result = document.getElementById("result");
+const resultArea = document.getElementById("summaryOutput");
 const shopInfo = document.getElementById("shopInfo");
 
-window.onload = function(){
+window.onload = function() {
   const saved1 = localStorage.getItem("person1");
   const saved2 = localStorage.getItem("person2");
-
-  if(saved1 && saved2){
+  if (saved1 && saved2) {
     document.getElementById("name1").value = saved1;
     document.getElementById("name2").value = saved2;
     person1 = saved1;
@@ -91,94 +55,75 @@ window.onload = function(){
   }
 }
 
-function registerNames(){
+function registerNames() {
   const n1 = document.getElementById("name1").value.trim();
   const n2 = document.getElementById("name2").value.trim();
-
-  if(!n1 || !n2){
+  if (!n1 || !n2) {
     alert("2人とも名前入れてね！");
     return;
   }
-
   person1 = n1;
   person2 = n2;
-
   localStorage.setItem("person1", person1);
   localStorage.setItem("person2", person2);
-
   input.disabled = false;
-  alert("保存完了✨");
+  alert("名前登録完了✨");
 }
 
-input.addEventListener("change", async ()=>{
+input.addEventListener("change", async () => {
   const file = input.files[0];
-  if(!file) return;
-
-  itemsArea.innerHTML = "読み取り中…";
-
-  const { data:{ text } } = await Tesseract.recognize(file,"jpn+eng");
-
+  if (!file) return;
+  itemsArea.innerHTML = "<em>読み取り中…</em>";
+  const { data: { text } } = await Tesseract.recognize(file, "jpn+eng");
   extractShopInfo(text);
   displayItems(text);
 });
 
-function normalizeNumbers(str){
-  return str
-    .replace(/[①]/g,"1")
-    .replace(/[②]/g,"2")
-    .replace(/[③]/g,"3")
-    .replace(/[④]/g,"4")
-    .replace(/[⑤]/g,"5")
-    .replace(/[⑥]/g,"6")
-    .replace(/[⑦]/g,"7")
-    .replace(/[⑧]/g,"8")
-    .replace(/[⑨]/g,"9")
-    .replace(/[⓪]/g,"0");
+function normalizeNumbers(str) {
+  return str.replace(/[①]/g,"1").replace(/[②]/g,"2").replace(/[③]/g,"3")
+            .replace(/[④]/g,"4").replace(/[⑤]/g,"5").replace(/[⑥]/g,"6")
+            .replace(/[⑦]/g,"7").replace(/[⑧]/g,"8").replace(/[⑨]/g,"9")
+            .replace(/[⓪]/g,"0");
 }
 
-function extractShopInfo(text){
+function extractShopInfo(text) {
   const lines = text.split("\n");
-  let shopName="";
-  let date="";
-
-  lines.forEach(line=>{
+  let shopName="", date="";
+  lines.forEach(line => {
     const cleaned = normalizeNumbers(line);
-
-    if(!shopName && cleaned.match(/店|スーパー|SHOP/)){
+    if (!shopName && cleaned.match(/店|スーパー|SHOP/)) {
       shopName = cleaned;
     }
-
-    if(!date){
-      const match = cleaned.match(/\d{4}\/\d{1,2}\/\d{1,2}/);
-      if(match) date = match[0];
+    if (!date) {
+      const m = cleaned.match(/\d{4}\/\d{1,2}\/\d{1,2}/);
+      if (m) date = m[0];
     }
   });
-
+  if (!document.getElementById("dateInput").value) {
+    document.getElementById("dateInput").value = date;
+  }
+  if (!document.getElementById("shopInput").value) {
+    document.getElementById("shopInput").value = shopName;
+  }
   shopInfo.innerHTML = `
     <div class="card">
       🏪 ${shopName || "店名不明"}<br>
       📅 ${date || "日付不明"}
-    </div>
-  `;
+    </div>`;
 }
 
-function displayItems(text){
-  itemsArea.innerHTML="";
+function displayItems(text) {
+  itemsArea.innerHTML = "";
   const lines = text.split("\n");
-
-  lines.forEach(line=>{
+  lines.forEach(line => {
     let cleaned = line.replace(/\s/g,"");
     cleaned = normalizeNumbers(cleaned);
-
-    if(cleaned.match(/TEL|登録|番号|日時|担当|小計|合計|預|つり/)) return;
-
+    if (cleaned.match(/TEL|登録|番号|日時|担当|小計|合計|預|つり/)) return;
     const match = cleaned.match(/(.+?)[¥\\￥]?([\d,]{2,})$/);
-    if(!match) return;
-
+    if (!match) return;
     const name = match[1];
     const price = parseInt(match[2].replace(/,/g,""));
-    if(price<10) return;
-
+    if (price < 10) return;
     const div = document.createElement("div");
     div.className="card";
     div.innerHTML=`
@@ -189,35 +134,33 @@ function displayItems(text){
         <option value="p2">${person2}</option>
       </select>
     `;
-    div.dataset.price=price;
+    div.dataset.price = price;
     itemsArea.appendChild(div);
   });
 }
 
-function calculate(){
-  let p1=0;
-  let p2=0;
-  let shared=0;
-
+function calculate() {
+  const date = document.getElementById("dateInput").value;
+  const shop = document.getElementById("shopInput").value;
+  let p1=0, p2=0, shared=0;
   const items = itemsArea.children;
+  let summary = `日付: ${date}\n店: ${shop}\n\n`;
 
-  for(let item of items){
-    const price=parseInt(item.dataset.price);
-    const select=item.querySelector("select").value;
-
-    if(select==="p1") p1+=price;
-    else if(select==="p2") p2+=price;
-    else shared+=price;
+  for (let item of items) {
+    const price = parseInt(item.dataset.price);
+    const who = item.querySelector("select").value;
+    const text = item.textContent.split(" - ")[0];
+    if (who==="p1") p1 += price;
+    else if (who==="p2") p2 += price;
+    else shared += price;
+    summary += `${text} ¥${price} → ${who==="p1"?person1:(who==="p2"?person2:"割り勘")}\n`;
   }
 
-  const half=Math.ceil(shared/2);
-  p1+=half;
-  p2+=half;
+  const half = Math.ceil(shared/2);
+  summary += `\n割り勘合計: ¥${shared} → 1人 ¥${half}\n\n`;
+  summary += `${person1}: ¥${p1+half}\n${person2}: ¥${p2+half}\n`;
 
-  result.innerHTML=`
-    ${person1}: ${p1} 円<br>
-    ${person2}: ${p2} 円
-  `;
+  resultArea.value = summary;
 }
 </script>
 
