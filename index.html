@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>レシート割り勘アプリ（カメラ直接OCR）</title>
+<title>レシート割り勘アプリ（カメラOCR安定版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
 <style>
@@ -12,7 +12,7 @@ button { background:#4f7cff; color:white; border:none; cursor:pointer; }
 textarea { height:180px; }
 .card { background:white; padding:8px; margin:6px 0; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); display:flex; gap:6px; align-items:center;}
 .card span { flex:1; }
-video { width:100%; border-radius:8px; margin:6px 0;}
+video { width:100%; height:auto; min-height:240px; border-radius:8px; margin:6px 0; background:#000;}
 </style>
 </head>
 <body>
@@ -26,7 +26,7 @@ video { width:100%; border-radius:8px; margin:6px 0;}
 <label>日付: <input type="text" id="dateInput" placeholder="YYYY/MM/DD"></label>
 <label>お店の名前: <input type="text" id="shopInput" placeholder="スーパー名など"></label>
 
-<video id="video" autoplay></video>
+<video id="video" autoplay playsinline></video>
 <button onclick="captureFrame()">読み取り</button>
 
 <div id="itemsArea"></div>
@@ -50,9 +50,13 @@ window.onload=function(){
 
   // カメラ起動
   const video=document.getElementById("video");
-  navigator.mediaDevices.getUserMedia({video:true})
-    .then(stream => { video.srcObject = stream; })
-    .catch(err => alert("カメラ起動できないよ💦"));
+  if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+    navigator.mediaDevices.getUserMedia({video:true})
+      .then(stream => { video.srcObject = stream; })
+      .catch(err => alert("カメラ許可が必要だよ💦"));
+  } else {
+    alert("このブラウザではカメラが使えません");
+  }
 }
 
 function registerNames(){
@@ -102,8 +106,8 @@ function displayItems(text){
 function captureFrame(){
   const video=document.getElementById("video");
   const canvas=document.getElementById("canvas");
-  canvas.width=video.videoWidth;
-  canvas.height=video.videoHeight;
+  canvas.width=video.videoWidth || 640;
+  canvas.height=video.videoHeight || 480;
   const ctx=canvas.getContext("2d");
   ctx.drawImage(video,0,0,canvas.width,canvas.height);
   const dataUrl=canvas.toDataURL();
