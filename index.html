@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>レシート割り勘アプリ（安定版）</title>
+<title>レシート割り勘アプリ（自動コピー版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
 <style>
@@ -28,7 +28,7 @@ textarea { height:180px; }
 <div id="itemsArea"></div>
 
 <h2>まとめ</h2>
-<button onclick="generateSummary()">まとめ作成</button>
+<button onclick="generateSummary()">まとめ作成（自動コピー付き）</button>
 <textarea id="summaryOutput" readonly placeholder="ここにまとめテキストが出るよ"></textarea>
 
 <script>
@@ -116,6 +116,13 @@ function generateSummary(){
   });
   summary+=`\n${person1} 合計: ¥${total1}\n${person2} 合計: ¥${total2}`;
   document.getElementById("summaryOutput").value=summary;
+
+  // 🔥 最後の合計部分を自動でコピー
+  const lines=summary.split("\n");
+  const totalLines=lines.slice(-2).join("\n");
+  navigator.clipboard.writeText(totalLines)
+    .then(()=>console.log("合計を自動でコピーしました✨"))
+    .catch(()=>console.log("自動コピー失敗💦"));
 }
 </script>
 
