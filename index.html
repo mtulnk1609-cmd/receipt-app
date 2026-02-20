@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>レシート割り勘アプリ（背面カメラOCR版）</title>
+<title>レシート割り勘アプリ（精度UP版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
 <style>
@@ -12,7 +12,6 @@ button { background:#4f7cff; color:white; border:none; cursor:pointer; }
 textarea { height:180px; }
 .card { background:white; padding:8px; margin:6px 0; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.1); display:flex; gap:6px; align-items:center;}
 .card span { flex:1; }
-video { width:100%; height:auto; min-height:240px; border-radius:8px; margin:6px 0; background:#000;}
 </style>
 </head>
 <body>
@@ -22,20 +21,18 @@ video { width:100%; height:auto; min-height:240px; border-radius:8px; margin:6px
 <input type="text" id="name2" placeholder="2人目の名前">
 <button onclick="registerNames()">登録</button>
 
-<h2>📝 レシート読み取り</h2>
+<h2>📝 レシート読み取り（画像）</h2>
 <label>日付: <input type="text" id="dateInput" placeholder="YYYY/MM/DD"></label>
 <label>お店の名前: <input type="text" id="shopInput" placeholder="スーパー名など"></label>
 
-<video id="video" autoplay playsinline></video>
-<button onclick="captureFrame()">読み取り</button>
+<input type="file" id="fileInput" accept="image/*">
+<button onclick="readFile()">読み取り</button>
 
 <div id="itemsArea"></div>
 
 <h2>まとめ</h2>
 <button onclick="generateSummary()">まとめ作成（自動コピー付き）</button>
 <textarea id="summaryOutput" readonly placeholder="ここにまとめテキストが出るよ"></textarea>
-
-<canvas id="canvas" style="display:none;"></canvas>
 
 <script>
 let person1="", person2="";
@@ -46,21 +43,6 @@ window.onload=function(){
     document.getElementById("name1").value = saved1;
     document.getElementById("name2").value = saved2;
     person1=saved1; person2=saved2;
-  }
-
-  // 背面カメラ優先で起動
-  const video=document.getElementById("video");
-  if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } })
-      .then(stream => { video.srcObject = stream; })
-      .catch(err => {
-        // 背面が使えなければ前面カメラにフォールバック
-        navigator.mediaDevices.getUserMedia({ video: true })
-          .then(stream => { video.srcObject = stream; })
-          .catch(e => alert("カメラ起動できません💦"));
-      });
-  } else {
-    alert("このブラウザではカメラが使えません");
   }
 }
 
@@ -108,18 +90,22 @@ function displayItems(text){
   });
 }
 
-function captureFrame(){
-  const video=document.getElementById("video");
-  const canvas=document.getElementById("canvas");
-  canvas.width=video.videoWidth || 640;
-  canvas.height=video.videoHeight || 480;
-  const ctx=canvas.getContext("2d");
-  ctx.drawImage(video,0,0,canvas.width,canvas.height);
-  const dataUrl=canvas.toDataURL();
-  itemsArea.innerHTML="<em>読み取り中…</em>";
-  Tesseract.recognize(dataUrl,'jpn+eng').then(({data:{text}})=>{
-    displayItems(text);
-  });
+function readFile(){
+  const file = document.getElementById("fileInput").files[0];
+  if(!file){ alert("画像を選んでね！"); return; }
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const dataUrl = e.target.result;
+    document.getElementById("itemsArea").innerHTML="<em>読み取り中…</em>";
+    // whitelist 設定で精度UP
+    Tesseract.recognize(dataUrl,'jpn+eng',{
+      tessedit_char_whitelist: '0123456789¥,.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン',
+      logger: m => console.log(m)
+    }).then(({data:{text}})=>{
+      displayItems(text);
+    });
+  }
+  reader.readAsDataURL(file);
 }
 
 function generateSummary(){
@@ -142,11 +128,10 @@ function generateSummary(){
   summary+=`\n${person1} 合計: ¥${total1}\n${person2} 合計: ¥${total2}`;
   document.getElementById("summaryOutput").value=summary;
 
+  // 自動コピー
   const lines=summary.split("\n");
   const totalLines=lines.slice(-2).join("\n");
-  navigator.clipboard.writeText(totalLines)
-    .then(()=>console.log("合計を自動コピーしました✨"))
-    .catch(()=>console.log("自動コピー失敗💦"));
+  navigator.clipboard.writeText(totalLines).then(()=>console.log("合計を自動コピー✨"));
 }
 </script>
 
